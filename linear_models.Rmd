@@ -1,0 +1,88 @@
+---
+title: "Linear Models"
+author: "Yue Liu"
+date: '`r format(Sys.time(), "%Y-%m-%d")`'
+output: github_document
+
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	warning = FALSE,
+	fig.width = 8, 
+  fig.height = 6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+## Import the data 
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>% 
+  mutate(stars = review_scores_location / 2) %>% 
+  rename(
+    borough = neighbourhood_group
+  ) %>% 
+  filter(borough != "Staten Island") %>% 
+  select(price, stars, borough, neighbourhood, room_type)
+```
+
+## Fit a model
+
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price, color = borough)) +
+  geom_point()
+```
+
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+Lets's look at the results...
+
+```{r,include = FALSE}
+summary(fit)
+
+summary(fit)$coef
+
+coef(fit)
+
+fitted.values(fit)
+
+residuals(fit)
+```
+
+Let's look at the results better...
+
+```{r}
+broom::glance(fit)
+
+broom::tidy(fit) %>% 
+# for a 1 unit increase in stars -> expect the price increase 32 dollars, keeping the borough fixed 
+# reference group - Bronx
+# Brooklyn 40.5 dollars more expensive than Bronx
+  select(-std.error, -statistic) %>% 
+  mutate(
+    term = str_replace(term, "borough","Borough: " )
+  ) %>% 
+  knitr::kable(digits = 3)
+```
+
