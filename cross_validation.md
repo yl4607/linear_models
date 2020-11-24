@@ -114,16 +114,112 @@ Look at prediction accuracy
 rmse(linear_mod, test_df)
 ```
 
-    ## [1] 0.7538765
+    ## [1] 0.7116577
 
 ``` r
 rmse(smooth_mod, test_df)
 ```
 
-    ## [1] 0.2374576
+    ## [1] 0.3714509
 
 ``` r
 rmse(wiggly_mod, test_df)
 ```
 
-    ## [1] 0.2538881
+    ## [1] 0.4105764
+
+## Cross validation using `modelr`
+
+``` r
+cv_df = 
+  crossv_mc(nonlin_df, 100)
+```
+
+What is happening here …
+
+``` r
+cv_df %>% 
+  pull(train) %>% .[[1]] %>% as_tibble()
+```
+
+    ## # A tibble: 79 x 3
+    ##       id      x      y
+    ##    <int>  <dbl>  <dbl>
+    ##  1     1 0.276   1.05 
+    ##  2     3 0.629  -0.240
+    ##  3     4 0.0746  0.743
+    ##  4     5 0.824  -1.56 
+    ##  5     6 0.571   0.381
+    ##  6     8 0.336   1.07 
+    ##  7     9 0.768  -1.52 
+    ##  8    10 0.346   1.23 
+    ##  9    11 0.234   0.725
+    ## 10    12 0.816  -1.51 
+    ## # … with 69 more rows
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Let’s try to fit models and get RMSEs for them
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+what do these results say about the model choices?
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-12-1.png" width="90%" />
+
+compute average
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  group_by(model) %>% 
+  summarize(avg_rmse = mean(rmse))
+```
+
+    ## `summarise()` ungrouping output (override with `.groups` argument)
+
+    ## # A tibble: 3 x 2
+    ##   model  avg_rmse
+    ##   <chr>     <dbl>
+    ## 1 linear    0.743
+    ## 2 smooth    0.317
+    ## 3 wiggly    0.376
