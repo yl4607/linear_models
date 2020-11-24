@@ -59,5 +59,41 @@ sim_df_const %>%
   ggplot(aes(x = x, y = y)) +
   geom_point() +
   geom_smooth(method = "lm")
+
+sim_df_nonconst %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+lm(y ~ x, data = sim_df_const) %>% broom::tidy()
+lm(y ~ x, data = sim_df_nonconst) %>% broom::tidy()
+```
+
+## Draw a bootstrap sample
+
+```{r}
+boot_sample = function(df) {
+  
+  sample_frac(df, replace = TRUE) %>% #draw a proportion of the sample
+    arrange(x)
+}
+```
+
+Check if this works ..
+
+```{r}
+boot_sample(sim_df_nonconst) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point(alpha = .3) +
+  geom_smooth(method = "lm") +
+  ylim(-5, 16)
+```
+
+```{r}
+boot_sample(sim_df_nonconst) %>% 
+  lm(y ~ x, data = .) %>% 
+  broom::tidy()
 ```
 
