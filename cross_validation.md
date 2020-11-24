@@ -114,19 +114,19 @@ Look at prediction accuracy
 rmse(linear_mod, test_df)
 ```
 
-    ## [1] 0.7116577
+    ## [1] 0.8789948
 
 ``` r
 rmse(smooth_mod, test_df)
 ```
 
-    ## [1] 0.3714509
+    ## [1] 0.3238366
 
 ``` r
 rmse(wiggly_mod, test_df)
 ```
 
-    ## [1] 0.4105764
+    ## [1] 0.4122074
 
 ## Cross validation using `modelr`
 
@@ -145,16 +145,16 @@ cv_df %>%
     ## # A tibble: 79 x 3
     ##       id      x      y
     ##    <int>  <dbl>  <dbl>
-    ##  1     1 0.276   1.05 
-    ##  2     3 0.629  -0.240
-    ##  3     4 0.0746  0.743
-    ##  4     5 0.824  -1.56 
-    ##  5     6 0.571   0.381
-    ##  6     8 0.336   1.07 
-    ##  7     9 0.768  -1.52 
-    ##  8    10 0.346   1.23 
-    ##  9    11 0.234   0.725
-    ## 10    12 0.816  -1.51 
+    ##  1     1 0.212   1.12 
+    ##  2     2 0.899  -2.79 
+    ##  3     5 0.241   0.761
+    ##  4     6 0.442   0.477
+    ##  5     7 0.104   1.02 
+    ##  6     8 0.483   1.00 
+    ##  7    10 0.185   0.958
+    ##  8    11 0.116   0.746
+    ##  9    12 0.0121  0.351
+    ## 10    13 0.937  -2.93 
     ## # … with 69 more rows
 
 ``` r
@@ -220,6 +220,97 @@ cv_df %>%
     ## # A tibble: 3 x 2
     ##   model  avg_rmse
     ##   <chr>     <dbl>
-    ## 1 linear    0.743
-    ## 2 smooth    0.317
-    ## 3 wiggly    0.376
+    ## 1 linear    0.771
+    ## 2 smooth    0.295
+    ## 3 wiggly    0.360
+
+## Try on a real dataset
+
+``` r
+child_growth_df = 
+  read_csv("./data/nepalese_children.csv") %>% 
+  mutate(
+    weight_cp = (weight > 7) * (weight - 7) 
+  )
+```
+
+    ## Parsed with column specification:
+    ## cols(
+    ##   age = col_double(),
+    ##   sex = col_double(),
+    ##   weight = col_double(),
+    ##   height = col_double(),
+    ##   armc = col_double()
+    ## )
+
+weight vs. arm circumference
+
+``` r
+child_growth_df %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = 0.3)
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-15-1.png" width="90%" />
+
+Fit the model
+
+``` r
+linear_mod = lm(armc ~ weight, data = child_growth_df)
+pwlin_mod = lm(armc ~ weight + weight_cp, data = child_growth_df)
+smooth_mod  = gam(armc ~ s(weight), data = child_growth_df)
+```
+
+``` r
+child_growth_df %>% 
+  gather_predictions(linear_mod, pwlin_mod, smooth_mod) %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = 0.3) +
+  geom_line(aes(y = pred), color = "red") +
+  facet_grid(. ~ model)
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-17-1.png" width="90%" />
+
+Try to understand model fit using cross validation
+
+``` r
+cv_df = 
+  crossv_mc(child_growth_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+``` r
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(armc ~ weight, data = .x)),
+    pwlin_mod = map(.x = train, ~lm(armc ~ weight + weight_cp, data = .x)),
+    smooth_mod = map(.x = train, ~gam(armc ~ s(weight), data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_pwlin = map2_dbl(.x = pwlin_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Violin plot
+
+``` r
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+<img src="cross_validation_files/figure-gfm/unnamed-chunk-20-1.png" width="90%" />
